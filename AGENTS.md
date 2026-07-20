@@ -1,5 +1,7 @@
 # AGENTS.md
 
+Workspace workflow contract: `/Users/ryanfong/workspace/DEV_WORKFLOW.md`.
+
 This file provides guidance to coding agents when working with code in this repository.
 
 ## Commands

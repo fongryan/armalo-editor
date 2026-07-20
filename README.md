@@ -83,7 +83,7 @@ Use `npx -y lavish-axi` to write a product or technical plan for what we discuss
 
 ### Session hook
 
-Want Lavish's ambient context - including your live open sessions - fed into every agent session instead of loading on demand?
+Want compact Lavish status fed into every agent session instead of loading guidance on demand?
 Install the CLI globally and opt into the hook:
 
 ```sh
@@ -91,8 +91,8 @@ npm install -g lavish-axi
 lavish-axi setup hooks
 ```
 
-This installs a `SessionStart` hook for **Claude Code**, **Codex**, **OpenCode**, and **GitHub Copilot CLI** that surfaces open sessions, visualization playbooks, and usage guidance at the start of each session.
-Unlike the skill, the hook also shows your live open sessions, so a fresh agent session can resume an in-flight review.
+This installs a `SessionStart` hook for **Claude Code**, **Codex**, **OpenCode**, and **GitHub Copilot CLI**. The hook reports aggregate session counts and expands at most three sessions only when they have pending prompts. Run `lavish-axi sessions` for the full inventory or `lavish-axi guide` for playbooks and complete guidance.
+Unlike the skill, the hook retains lightweight live status so a fresh agent can notice in-flight feedback without loading every session and instruction.
 **Restart your agent session after running this** so the new hook takes effect.
 
 ### From source
@@ -187,7 +187,9 @@ pnpm link
 
 | Command                         | Description                                                                                                                                                                                                                                                                                    |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lavish-axi`                    | Show current sessions and usage guidance.                                                                                                                                                                                                                                                      |
+| `lavish-axi`                    | Show compact session counts, up to three sessions with pending prompts, and commands for explicit detail.                                                                                                                                                                                      |
+| `lavish-axi sessions`           | Show the full active-session inventory, including URLs and pending prompt counts.                                                                                                                                                                                                              |
+| `lavish-axi guide`              | Show complete visual guidance, playbooks, and usage help.                                                                                                                                                                                                                                      |
 | `lavish-axi update`             | Check for or apply the latest npm release through the AXI SDK self-updater.                                                                                                                                                                                                                    |
 | `lavish-axi <html-file>`        | Open or resume a Lavish Editor session, with the open-time layout gate enabled by default. Refuses to reopen a session the user explicitly ended from the browser unless `--reopen` is passed.                                                                                                 |
 | `lavish-axi poll <html-file>`   | Long-poll until the user sends feedback, ends the session, or the browser proves a severe layout failure; leave no-timeout polls running, or re-run them if interrupted. Codex guidance keeps polls attached to the active turn. On `status: ended`, stop polling and do not reopen uninvited. |

@@ -14,6 +14,7 @@ process.env.LAVISH_AXI_HOST = "127.0.0.1";
 process.env.LAVISH_AXI_LINK_HOST = "127.0.0.1";
 
 import {
+  createAmbientOutput,
   collapseHomeDirectory,
   computeCopilotCliHookUpdate,
   createCopilotCliAmbientContextScript,
@@ -26,6 +27,7 @@ import {
   createPlaybookOutput,
   createServerSpawnOptions,
   createShareOutput,
+  createSessionsOutput,
   createUserEndedOpenOutput,
   detectInvokingAgent,
   fetchJson,
@@ -82,9 +84,9 @@ test("home output teaches agents when and how to use Lavish Editor", () => {
 
   assert.equal(output.bin, "~/.local/bin/lavish-axi");
   assert.match(output.description, /Lavish Editor/);
-  assert.match(output.description, /complex response/);
-  assert.match(output.description, /consider using Lavish Editor/);
-  assert.match(output.description, /First generate an interactive HTML artifact/);
+  assert.match(output.description, /explicitly requests/);
+  assert.match(output.description, /rendered UI review/);
+  assert.doesNotMatch(output.description, /complex response/);
   assert.deepEqual(output.sessions, []);
   assert.equal("use_cases" in output, false);
   assert.equal("example_use_cases" in output, false);
@@ -116,6 +118,45 @@ test("home output teaches agents when and how to use Lavish Editor", () => {
   assert.ok(!output.help.some((item) => item.includes('<meta name="lavish-design" content="off">')));
   assert.ok(!output.help.some((item) => item.includes("Known IDs")));
   assert.ok(output.help.some((item) => item.includes("technical plan")));
+});
+
+test("ambient output stays compact and only expands actionable prompts", () => {
+  const sessions = Array.from({ length: 67 }, (_, index) => ({
+    file: `/tmp/report-${index}.html`,
+    status: index < 5 ? "feedback" : "open",
+    url: `http://127.0.0.1/session/${index}`,
+    pending_prompts: index === 0 ? 2 : 0,
+  }));
+
+  const output = createAmbientOutput({ bin: "lavish-axi", sessions });
+
+  assert.equal(output.sessions.total, 67);
+  assert.equal(output.sessions.needs_attention, 5);
+  assert.equal(output.sessions.pending_prompts, 2);
+  assert.equal(output.attention.length, 1);
+  assert.deepEqual(Object.keys(output.attention[0]), ["file", "status", "pending_prompts"]);
+  assert.equal(output.attention[0].file, "/tmp/report-0.html");
+  assert.equal("visual_guidance" in output, false);
+  assert.equal("playbooks" in output, false);
+  assert.ok(output.help.some((item) => item.includes("lavish-axi guide")));
+  assert.ok(output.help.some((item) => item.includes("lavish-axi sessions")));
+});
+
+test("sessions output preserves the full explicit inventory", () => {
+  const sessions = [
+    {
+      file: "/tmp/report.html",
+      status: "open",
+      url: "http://127.0.0.1/session/one",
+      pending_prompts: 0,
+    },
+  ];
+
+  const output = createSessionsOutput(sessions);
+
+  assert.equal(output.sessions.length, 1);
+  assert.equal(output.sessions[0].url, "http://127.0.0.1/session/one");
+  assert.ok(output.help.some((item) => item.includes("lavish-axi poll")));
 });
 
 test("the design-priority rule is single-sourced and keeps its three-step semantics", () => {

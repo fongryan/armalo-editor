@@ -21,13 +21,25 @@ import { resolveDesignAssetPath, serve } from "./server.js";
 import { canonicalFile, sessionKey, SessionStore } from "./session-store.js";
 import { initDefaultTelemetry } from "./telemetry.js";
 
-const COMMANDS = new Set(["open", "poll", "end", "stop", "server", "playbook", "design", "setup", "export", "share"]);
+const COMMANDS = new Set([
+  "open",
+  "poll",
+  "end",
+  "stop",
+  "server",
+  "playbook",
+  "design",
+  "guide",
+  "sessions",
+  "setup",
+  "export",
+  "share",
+]);
 // SDK-reserved built-ins (e.g. `update`) must reach runAxiCli untouched; otherwise
 // the bare-arg normalization below would rewrite them into the hidden `open` command.
 const RESERVED = new Set(RESERVED_COMMANDS);
 const DESCRIPTION =
-  "Lavish Editor helps agents turn rich HTML artifacts into collaborative human review surfaces. Whenever you are about to give user a complex response that will be easier to understand via a rich / interactive page, consider using Lavish Editor. " +
-  "First generate an interactive HTML artifact according to user request, then run `lavish-axi <html-file>` so the user can visually review it, annotate elements or selected text, queue prompts, and send feedback back through `lavish-axi poll`.";
+  "Lavish Editor creates collaborative HTML review surfaces when the user explicitly requests a visual artifact or when a task needs genuine rendered UI review.";
 export const POLL_WAKE_PATH_RULES = Object.freeze([
   "Keep the poll in the foreground by default and let it return the feedback directly to the agent.",
   "A background poll is allowed only through a harness-native tracked background-job facility whose completion result is guaranteed to resume or notify the same agent.",
@@ -75,12 +87,17 @@ export async function run(argv) {
       argv: isTopLevelHelp ? [] : normalizedArgv,
       topLevelHelp: createTopLevelHelp({ agent }),
       home: async () =>
-        createHomeOutput({
-          bin: process.argv[1] || "lavish-axi",
-          sessions: isTopLevelHelp ? [] : await visibleSessions(),
-          includeSessions: !isTopLevelHelp,
-          agent,
-        }),
+        isTopLevelHelp
+          ? createHomeOutput({
+              bin: process.argv[1] || "lavish-axi",
+              sessions: [],
+              includeSessions: false,
+              agent,
+            })
+          : createAmbientOutput({
+              bin: process.argv[1] || "lavish-axi",
+              sessions: await visibleSessions(),
+            }),
       commands: {
         open: openCommand,
         poll: pollCommand,
@@ -88,6 +105,8 @@ export async function run(argv) {
         stop: stopCommand,
         playbook: playbookCommand,
         design: designCommand,
+        guide: guideCommand,
+        sessions: sessionsCommand,
         setup: setupCommand,
         server: serverCommand,
         export: exportCommand,
@@ -169,6 +188,49 @@ export function createHomeOutput({ bin, sessions, includeSessions = true, agent 
       DESIGN_SYSTEM_HINT,
       "Use lavish-axi when the user asks for a visual artifact, HTML explainer, interactive prototype, review surface, product or technical plan, comparison, report, or browser-based feedback loop",
     ],
+  };
+}
+
+export function createAmbientOutput({ bin, sessions }) {
+  const attention = sessions.filter(
+    (session) => session.status === "feedback" || Number(session.pending_prompts || 0) > 0,
+  );
+  const actionable = sessions.filter((session) => Number(session.pending_prompts || 0) > 0);
+  const pendingPrompts = actionable.reduce((total, session) => total + Number(session.pending_prompts || 0), 0);
+
+  return {
+    bin: collapseHomeDirectory(bin, os.homedir()),
+    description: DESCRIPTION,
+    sessions: {
+      total: sessions.length,
+      needs_attention: attention.length,
+      pending_prompts: pendingPrompts,
+    },
+    ...(actionable.length > 0
+      ? {
+          attention: actionable.slice(0, 3).map((session) => ({
+            file: session.file,
+            status: session.status,
+            pending_prompts: session.pending_prompts || 0,
+          })),
+        }
+      : {}),
+    help: [
+      "Run `lavish-axi sessions` for the full session inventory",
+      "Run `lavish-axi guide` for visual guidance, playbooks, and complete usage help",
+    ],
+  };
+}
+
+export function createSessionsOutput(sessions) {
+  return {
+    sessions: sessions.map((session) => ({
+      file: session.file,
+      status: session.status,
+      url: session.url,
+      pending_prompts: session.pending_prompts || 0,
+    })),
+    help: ["Run `lavish-axi poll <html-file>` to wait for feedback on a session"],
   };
 }
 
@@ -589,6 +651,19 @@ async function playbookCommand(args) {
 
 async function designCommand() {
   return createDesignOutput();
+}
+
+async function guideCommand() {
+  return createHomeOutput({
+    bin: process.argv[1] || "lavish-axi",
+    sessions: [],
+    includeSessions: false,
+    agent: detectInvokingAgent(process.env),
+  });
+}
+
+async function sessionsCommand() {
+  return createSessionsOutput(await visibleSessions());
 }
 
 async function setupCommand(args) {
@@ -1043,7 +1118,7 @@ export function getCommandHelp(command, { agent = "generic" } = {}) {
 }
 
 function createTopLevelHelp({ agent = "generic" } = {}) {
-  return `lavish-axi - Lavish Editor AXI\n\nUsage:\n  lavish-axi\n  lavish-axi <html-file> [--no-open] [--no-gate] [--reopen]\n  lavish-axi poll <html-file> [--agent-reply "..."]\n  lavish-axi end <html-file>\n  lavish-axi export <html-file> [--out <path>]\n  lavish-axi share <html-file> [--password <pw>] [--token <t>]\n  lavish-axi stop\n  lavish-axi playbook [playbook_id]\n  lavish-axi design\n  lavish-axi setup hooks\n\n${DESIGN_SYSTEM_HINT}\n\nNote: poll long-polls indefinitely by default until the user sends feedback, ends the session, or the browser proves a severe layout failure, staying silent while it waits - never kill it. Repair and re-check every returned layout failure before involving the human; cosmetic and uncertain observations are never returned. Do not pass --timeout-ms during normal agent use; it is for tests and debugging only. ${pollExecutionGuidance({ agent })} ${POLL_SEND_AND_END_RULE}\n\n`;
+  return `lavish-axi - Lavish Editor AXI\n\nUsage:\n  lavish-axi\n  lavish-axi <html-file> [--no-open] [--no-gate] [--reopen]\n  lavish-axi poll <html-file> [--agent-reply "..."]\n  lavish-axi end <html-file>\n  lavish-axi export <html-file> [--out <path>]\n  lavish-axi share <html-file> [--password <pw>] [--token <t>]\n  lavish-axi stop\n  lavish-axi playbook [playbook_id]\n  lavish-axi design\n  lavish-axi guide\n  lavish-axi sessions\n  lavish-axi setup hooks\n\n${DESIGN_SYSTEM_HINT}\n\nNote: poll long-polls indefinitely by default until the user sends feedback, ends the session, or the browser proves a severe layout failure, staying silent while it waits - never kill it. Repair and re-check every returned layout failure before involving the human; cosmetic and uncertain observations are never returned. Do not pass --timeout-ms during normal agent use; it is for tests and debugging only. ${pollExecutionGuidance({ agent })} ${POLL_SEND_AND_END_RULE}\n\n`;
 }
 
 function createCommandHelp({ agent = "generic" } = {}) {
@@ -1056,6 +1131,10 @@ function createCommandHelp({ agent = "generic" } = {}) {
     stop: `Usage: lavish-axi stop [--port <port>]\n\nShut down the background Lavish Editor server. The server also stops itself when no browser or poll has been connected for a while (LAVISH_AXI_IDLE_TIMEOUT_MS, default 30m) and immediately when the last session ends with nothing connected.\n`,
     playbook: `Usage: lavish-axi playbook [playbook_id]\n\nList focused artifact guidance playbooks, or show one playbook by ID. Known IDs: diagram, table, comparison, plan, code, input, slides.\n\n${PLAYBOOK_ROUTER_HELP}\n\nExamples:\n  lavish-axi playbook\n  lavish-axi playbook diagram\n  lavish-axi playbook input\n`,
     design: `Usage: lavish-axi design\n\nShow a copy-pasteable CDN snippet for Tailwind CSS browser runtime v4 + DaisyUI v5 + themes, Mermaid diagram tooling, a content-to-playbook router, an optional layout safety CSS snippet, plus technical reference for DaisyUI components. ${PLAYBOOK_ROUTER_HELP} Lavish artifacts stay portable HTML. This CDN snippet is the design fallback, not the default: inspect the subject project before falling back, and paste the layout safety CSS only when useful for dense nested grid/flex layouts, badges, wide fonts, or local media. ${DESIGN_PRIORITY_RULE}\n`,
+    guide:
+      "Usage: lavish-axi guide\n\nShow complete Lavish visual guidance, playbooks, and usage help. The default no-argument output stays compact for session-start hooks.\n",
+    sessions:
+      "Usage: lavish-axi sessions\n\nList every active Lavish session with file, status, URL, and pending prompt count.\n",
     setup: `Usage: lavish-axi setup hooks\n\nInstall or repair agent SessionStart hooks for lavish-axi ambient context in Claude Code, Codex, OpenCode, and GitHub Copilot CLI. Restart your agent session afterward to receive the context.\n`,
     server: `Usage: lavish-axi server [--port 4387] [--verbose]\n\nRun the local Lavish Editor server. Pass --verbose (or set LAVISH_AXI_DEBUG=1) to log session and watcher events to stderr. Detached server output is appended to ~/.lavish-axi/server.log, or LAVISH_AXI_STATE_DIR/server.log when set, for startup and crash diagnostics.\n\nLAVISH_AXI_HOST sets the bind address (default 127.0.0.1; a wildcard 0.0.0.0 or :: binds every interface). Binding beyond loopback exposes an unauthenticated server that can read and serve arbitrary local files to anything that can reach it, so only do so on a trusted network. LAVISH_AXI_LINK_HOST sets the hostname written into generated session links (default: the bind address, or loopback when bound to a wildcard). LAVISH_AXI_NO_OPEN=1 (or --no-open) suppresses the local browser launch.\n`,
   };
