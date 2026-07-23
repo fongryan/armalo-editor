@@ -2,6 +2,8 @@ import { mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+import { DEFAULT_PORT, STATE_DIR_NAME } from "./brand.js";
+
 export const LOOPBACK_HOST = "127.0.0.1";
 export const IPV6_LOOPBACK_HOST = "::1";
 
@@ -14,10 +16,15 @@ const WILDCARD_BIND_LOOPBACK = new Map([
   ["::", IPV6_LOOPBACK_HOST],
 ]);
 
-// Address the server binds to (LAVISH_AXI_HOST). Defaults to loopback. A wildcard value
+function preferredEnv(env, primary, fallback) {
+  return env[primary]?.trim() || env[fallback]?.trim() || "";
+}
+
+// Address the server binds to (ARMALO_EDITOR_HOST, with LAVISH_AXI_HOST as a migration
+// fallback). Defaults to loopback. A wildcard value
 // (0.0.0.0 or ::) binds every interface.
 export function bindHost(env = process.env) {
-  return env.LAVISH_AXI_HOST?.trim() || LOOPBACK_HOST;
+  return preferredEnv(env, "ARMALO_EDITOR_HOST", "LAVISH_AXI_HOST") || LOOPBACK_HOST;
 }
 
 // Host the CLI uses to reach the server it spawned. A wildcard bind address can't be
@@ -27,10 +34,10 @@ export function clientHost(env = process.env) {
   return WILDCARD_BIND_LOOPBACK.get(host) ?? host;
 }
 
-// Hostname written into the session URLs the server generates (LAVISH_AXI_LINK_HOST).
-// Defaults to the host the CLI dials.
+// Hostname written into generated session URLs (ARMALO_EDITOR_LINK_HOST, with
+// LAVISH_AXI_LINK_HOST as a migration fallback). Defaults to the host the CLI dials.
 export function linkHost(env = process.env) {
-  return env.LAVISH_AXI_LINK_HOST?.trim() || clientHost(env);
+  return preferredEnv(env, "ARMALO_EDITOR_LINK_HOST", "LAVISH_AXI_LINK_HOST") || clientHost(env);
 }
 
 // Brackets an IPv6 literal so it can be safely interpolated into a URL authority.
@@ -40,8 +47,8 @@ export function hostForUrl(host) {
   return host;
 }
 
-export function stateDir() {
-  return process.env.LAVISH_AXI_STATE_DIR || path.join(os.homedir(), ".lavish-axi");
+export function stateDir(env = process.env) {
+  return preferredEnv(env, "ARMALO_EDITOR_STATE_DIR", "LAVISH_AXI_STATE_DIR") || path.join(os.homedir(), STATE_DIR_NAME);
 }
 
 export function stateFile() {
@@ -56,6 +63,6 @@ export async function ensureStateDir() {
   await mkdir(stateDir(), { recursive: true });
 }
 
-export function defaultPort() {
-  return Number(process.env.LAVISH_AXI_PORT || 4387);
+export function defaultPort(env = process.env) {
+  return Number(preferredEnv(env, "ARMALO_EDITOR_PORT", "LAVISH_AXI_PORT") || DEFAULT_PORT);
 }

@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import chokidar from "chokidar";
 import express from "express";
 
+import { SERVER_APP_NAME } from "./brand.js";
 import {
   classifySevereTextOverflow,
   classifyMaterialRectEscape,
@@ -148,7 +149,7 @@ export async function serve({
   );
 
   app.get("/health", (req, res) => {
-    res.json({ ok: true, app: "lavish-axi", version });
+    res.json({ ok: true, app: SERVER_APP_NAME, version });
   });
 
   let shutdownResolve;

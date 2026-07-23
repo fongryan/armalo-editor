@@ -889,6 +889,7 @@ test("/health reports the server version so clients can detect upgrades", async 
     const res = await fetch(`http://127.0.0.1:${server.port}/health`);
     const body = await res.json();
     assert.equal(body.ok, true);
+    assert.equal(body.app, "armalo-editor");
     assert.equal(body.version, "9.9.9-test");
   } finally {
     await server.close();
